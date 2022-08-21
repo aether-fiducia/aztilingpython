@@ -5,6 +5,7 @@ from functools import reduce
 import simFuncs
 import random as r
 import math
+import os
 
 
 class Point:
@@ -333,13 +334,11 @@ class Face:  # As described in the paper by Janvresse, Rue, and Velenik
 
         return (return_list, list(chain(*return_zeros_lists)))
 
-    @staticmethod
-    def active_faces(n):
-        faces = []
-        for j in range(0, -n, -1):
-            for k in range(n):
-                faces.append(Face(Point(j + k, -n + 1 - j + k)))
-        return faces
+        # faces = []
+        # for j in range(0, -n, -1):
+        #     for k in range(n):
+        #         faces.append(Face(Point(j + k, -n + 1 - j + k)))
+        # return faces
 
 
 class Diamond:
@@ -519,7 +518,7 @@ class GenWeight(Weight):
     def generate_diamond(self, sub_diamond):
         dominos = simFuncs.empty_domino_array(self.n)
 
-        for face in Face.active_faces(self.n):
+        for face in simFuncs.active_faces(self.n):
             new_doms = face.next_diamond_construction(sub_diamond, self)
             for dom in new_doms:
                 x, y = Domino.change_ver_coords(dom.p1, self.n)
