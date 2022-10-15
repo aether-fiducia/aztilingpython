@@ -20,8 +20,7 @@ if __name__ == "__main__":
 
     # Get the order of the diamond to be created
     user_order = int(input("What is the order of the diamond (must be an integer): "))
-    diamond = Diamond.uniform_diamond(user_order)
-    print(user_order)
+    diamond = Diamond.bernoulli_diamond(user_order, 0.25)
 
     # Start building the grid to plot from the diamond
     bounds = [0, 2 * user_order, 2 * user_order, 0]
@@ -33,3 +32,6 @@ if __name__ == "__main__":
 
     # Actually show the plot
     plt.show()
+
+# Order 150 - 13 seconds
+# Order 175 - 23 seconds

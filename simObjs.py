@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-from itertools import chain
-from functools import reduce
 import simFuncs
+from itertools import chain
+from functools import reduce, partial
+from multiprocessing import Pool
+import os
 import random as r
 import math
-import os
 
 
 class Point:
@@ -136,7 +137,7 @@ class Domino:
         else:
             return -n + 1 - y
 
-    # Change the vertical coords of a point, returning the coords (n is the order)
+    # Change the horizontal coords of a point, returning the coords (n is the order)
     @staticmethod
     def change_hor_coords(point, n):
         return (point.x - Domino.x_min(point.y, n), point.y + n - 1)
@@ -399,25 +400,31 @@ class Diamond:
 
     # Generate a random tiling of order weights[-1].n
     #
-    # NOTE: Okay, programmer talk incoming. Python isn't lazy, and this is some nasty
-    # recursion that is going to gum things up a bit. Particularly, under the hood of
-    # reduce what is really going on is a left fold, but it beats writing out the for
-    # loops by hand. Also, if one part isn't going to parallize well, it will be this.
-    #
     # NOTE: What's really happening in the fold is that a list of Weights is iteratively
     # folding into a list of diamonds.
     @staticmethod
     def generate_diamond(weights):
         return reduce(
-            lambda diamond, weight: weight.generate_diamond(diamond),
+            Diamond.temp_task,
+            # lambda diamond, weight: weight.generate_diamond(diamond),
             weights[1:],
             weights[0].generate_order_one(),
         )
+
+    @staticmethod
+    def temp_task(diamond, weight):
+        # print("Generated diamond of order" + str(diamond.order)) EACH ITERATION TAKES LONGER BUT YOU ALREADY KNEW THAT
+        return weight.generate_diamond(diamond)
 
     # Uniform diamond generation just takes an order
     def uniform_diamond(n):
         return Diamond.generate_diamond(
             list(map(lambda x: UniformWeightGeneration(x), list(range(1, n + 1))))
+        )
+
+    def bernoulli_diamond(n, p):
+        return Diamond.generate_diamond(
+            list(map(lambda x: BernoulliWeightGeneration(x,p), list(range(1, n+1))))
         )
 
 
@@ -426,12 +433,6 @@ This is for more generic distributions using the weight algorithm described in t
 by Janvresse, Rue, and Velenik. For the moment this is incomplete (as getting a working
 prototype was more important) but after flushing out the face all what is needed is
 to complete the weight generation.
-
-Not only are more probability distributions going to be added, most if not all of this
-code needs a major refractor. The current plan is to test a few more probability distributions,
-and then do a major rewrite in Haskell introducing a very important, non-math feature:
-parallelization. However, this is an imperfect world, with imperfect code, and so for now
-this is how it will stay, for now.
 """
 
 
@@ -519,8 +520,7 @@ class GenWeight(Weight):
         dominos = simFuncs.empty_domino_array(self.n)
 
         for face in simFuncs.active_faces(self.n):
-            new_doms = face.next_diamond_construction(sub_diamond, self)
-            for dom in new_doms:
+            for dom in face.next_diamond_construction(sub_diamond, self):
                 x, y = Domino.change_ver_coords(dom.p1, self.n)
                 dominos[x][y] = dom
 
@@ -570,7 +570,6 @@ class CustomGenWeight(GenWeight, CustomWeight):
 
             return new_weights
 
-    # Oh Haskell how I miss your where keyword so as to not pollute my namespace.
     # At least the helper is bound to the scope of the class.
     @staticmethod
     def sub_weight_helper(face, weights):
@@ -615,132 +614,26 @@ class UniformWeightGeneration(GenWeight):
         else:
             return UniformWeightGeneration(n - 1)
 
+# TEST CLASS
+class BernoulliWeightGeneration(GenWeight):
 
-"""
-I'll need this later, but for now we aren't doing inverse operations and thus it is
-not required. For now, just ignore this code.
-"""
+    # Standard
+    def __init__(self, order, p):
+        super().__init__(order)
+        self.p = p
 
-# class DiamondConstruction:
-#     """
-#     Here my true detest for OOP will shine through. Diamond construction is done through
-#     this seperate class as the Diamond will be used only for the algorithm.
-#     """
+    # This is not a CustomWeight and thus shouldn't change
+    def update(self, domino, weight):
+        raise NotImplementedError("BernoulliWeight Do Not Change")
 
-#     def __init__(self, order):
-#         self.order = order
-#         self.dominos = simFuncs.empty_domino_array(order)
+    def apply(self, domino):
+        if domino.is_ver():
+            return self.p
+        else:
+            return 1-self.p
 
-#     # Scale a domino to the order of the Diamond being constructed as apply the ver_change
-#     # and then add it to the construction
-#     def update(self, domino):
-#         coords = Domino.change_ver_coords(domino.p1, order)
-#         self[coords[0], coords[1]] = domino
-
-#     # Count the number of dominos in the construction
-#     def dominos_number(self):
-#         len(list(filter(None, list(chain(self.dominos)))))
-
-#     # Check if a point is in bounds (a use of the taxicab metric, huzzah!)
-#     def in_bounds_point(self, point):
-#         return abs(point.x - 0.5) + abs(point.y - 0.5) <= self.order
-
-#     # Check if a domino is in bounds using the above
-#     def in_bounds_domino(self, domino):
-#         if domino == None:
-#             return False
-#         return in_bounds_point(domino.p1) and in_bounds_point(domino.p2)
-
-#     # See if a domino is contained in the construction at the position of the argument
-#     def contains(self, domino):
-#         if in_bounds_domino(domino) == False:
-#             return False
-#         coords = Domino.change_ver_coords(domino.p1, order)
-#         if self.dominos[coords[x]][coords[y]] == None:
-#             return False
-#         else:
-#             return True
-
-#     # See if a given point in the construction is occupied
-#     def is_point_occupied(self, point):
-#         # A point is covered if there is a domino that covers it AND an adjacent point
-#         possible_covering_dominos = [
-#             Domino(point, point + Point(1, 0)),
-#             Domino(point, point + Point(-1, 0)),
-#             Domino(point + Point(-1, 0), point),
-#             Domino(point + Point(1, 0), point),
-#         ]
-#         for d in possible_covering_dominos:
-#             if self.contains(d):
-#                 return True
-#             else:
-#                 return False
-
-#     # Returns a list of possible dominos cover a given point (or None should the point
-#     # already be occupied, as then no dominos "could" cover the point as one already does).
-#     def possible_dominos_on(self, point):
-#         if is_point_occupied(point):
-#             return None
-#         return list(
-#             map(
-#                 lambda p: Domino(p, point) if point.compare(p) else Domino(point, p),
-#                 filter(
-#                     lambda p: self.is_point_occupied(p),
-#                     filter(lambda p: self.in_bounds_point(p), point.adjacent_points()),
-#                 ),
-#             )
-#         )
-
-#     # Get a list of the dominos forced by the possible dominos on the construction
-#     # This is, as suggested, EXACTLY the dominos that are forced to exist. If that is
-#     # nebulous, see the inner filter expression.
-#     def forced_dominos(self):
-#         return simFuncs.distinct_domino_list(
-#             list(
-#                 chain(
-#                     filter(
-#                         lambda doms: (len(ds) != 0) and (len(ds[1:]) == 0),
-#                         map(
-#                             lambda p: self.possible_dominos_on(p),
-#                             DiamondConstruction.all_points(),
-#                         ),
-#                     )
-#                 )
-#             )
-#         )
-
-#     # Fill the construction with all the dominos that are forced by the current state
-#     # Just a utility VOID function
-#     def fill_forced(self):
-#         doms_to_fill = self.forced_dominos()
-#         while len(doms_to_fill) != 0:
-#             for d in doms_to_fill:
-#                 self.update(d)
-#             # We use the while loop as introducing forced dominos may make other possibilities
-#             # become forced dominos (think like a soduko game)
-#             doms_to_fill = self.forced_dominos()
-
-#     # Insert a diamond into a construction (VOID obviously)
-#     def insert_diamond(self, diamond, center=Point(0, 0)):
-#         doms_for_construction = list(
-#             map(
-#                 lambda d: Domino(d.p1 + center, d.p2 + center),
-#                 diamond.list_of_dominos(),
-#             )
-#         )
-#         for d in doms_for_construction:
-#             self.update(d)
-
-#     # Turn a construction into a diamond
-#     def to_diamond(self):
-#         return Diamond(self.dominos)
-
-#     # Returns a list of all the points of an order n Diamond
-#     @staticmethod
-#     def all_points(order):
-#         # Should probably do a list comprehension or something
-#         points = []
-#         for y in range(1, self.order + 1):
-#             for x in range(-self.order + y, (self.order + 1) - y + 1):
-#                 points.append(Point(x, y))
-#         return list(chain(map(lambda p: [Point(p.x, p.y), Point(x, -y + 1)])))
+    def sub_weights(self):
+        if n == 1:
+            raise ValueError("Weight obj cannot be made for an order 0 diamond")
+        else:
+            return BernoulliWeightGeneration(n-1)

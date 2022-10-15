@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
-import os
 import simObjs
-from multiprocessing import Pool
 from itertools import chain
-from functools import partial
 
 # This isn't best practice, but it saves from having a bunch
 # of nasty inheritence in the objects
@@ -47,16 +44,9 @@ def flatMap(func, list_of_lists):
     return list(chain(*list(map(lambda l: func(l), list_of_lists))))
 
 
-# 13 seconds for an order of 150
 def active_faces(n):
+    faces = []
     for j in range(0, -n, -1):
         for k in range(n):
-            yield simObjs.Face(simObjs.Point(j + k, -n + 1 - j + k))
-
-
-"""
-I have a fear (that I think is correct) that the performance of active_faces will
-always be poor in python due to the overhead introduced by the multiprocessing
-library (as active_faces is a CPU-bound task and python has a GIL: global interpreter
-lock)
-"""
+            faces.append(simObjs.Face(simObjs.Point(j + k, -n + 1 - j + k)))
+    return faces
